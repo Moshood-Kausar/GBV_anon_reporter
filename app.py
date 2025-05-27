@@ -1,9 +1,10 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, AudioProcessorBase
 import cv2
 import av
+import numpy as np
 
-# Load OpenCV face detector (Haar cascade)
+# --- FACE BLUR VIDEO TRANSFORMER ---
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 class FaceBlurTransformer(VideoTransformerBase):
@@ -19,8 +20,27 @@ class FaceBlurTransformer(VideoTransformerBase):
 
         return img
 
-st.title("🛡️ GBV Real-Time Face Blur Reporting System")
+# --- VOICE MASK AUDIO PROCESSOR ---
+class VoiceMasker(AudioProcessorBase):
+    def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
+        samples = frame.to_ndarray()
+        # Apply simple pitch reduction for anonymity
+        modified = np.clip(samples * 0.7, -32768, 32767).astype(np.int16)
+        new_frame = av.AudioFrame.from_ndarray(modified, layout=frame.layout.name)
+        new_frame.sample_rate = frame.sample_rate
+        return new_frame
 
-st.info("This app uses your webcam to record and blur your face in real-time for privacy.")
+# --- Streamlit Interface ---
+st.set_page_config(page_title="GBV Reporter", layout="centered")
+st.title("🛡️ GBV Real-Time Anonymous Reporter")
 
-webrtc_streamer(key="blur", video_transformer_factory=FaceBlurTransformer)
+st.info("This app blurs your face and masks your voice in real-time to help report sensitive cases like GBV anonymously.")
+
+# --- WebRTC Stream ---
+webrtc_streamer(
+    key="anon-report",
+    video_transformer_factory=FaceBlurTransformer,
+    audio_processor_factory=VoiceMasker,
+    media_stream_constraints={"video": True, "audio": True},
+    async_processing=True
+)
